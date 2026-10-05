@@ -36,6 +36,12 @@ class CommandPolicy:
     forbidden_tokens = ("&&", "||", ";", "|", ">", "<", "$", "`", "..")
 
     def authorize(self, request: CommandRequest) -> CommandRequest:
+        if request.command is CommandId.PYTHON and request.args and request.args[0] not in {"--version", "-m"}:
+            raise DeniedOperation("Python execution is limited to version checks and pytest module runs")
+        if request.command is CommandId.PYTHON and request.args[:2] == ["-m", "pytest"]:
+            pass
+        elif request.command is CommandId.PYTHON and request.args and request.args[0] == "-m":
+            raise DeniedOperation("Only the pytest Python module is allowlisted")
         for argument in request.args:
             if any(token in argument for token in self.forbidden_tokens):
                 raise DeniedOperation("Command argument contains a forbidden shell or traversal token")
