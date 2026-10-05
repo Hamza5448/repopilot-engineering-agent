@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     database_url: str = "postgresql+psycopg://repopilot:repopilot@localhost:5432/repopilot"
     redis_url: str = "redis://localhost:6379/0"
+    database_path: str = ".local/repopilot.db"
     github_webhook_secret: str | None = None
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra="ignore")

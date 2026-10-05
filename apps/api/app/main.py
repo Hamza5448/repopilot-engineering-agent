@@ -5,11 +5,14 @@ from fastapi import FastAPI, Header, HTTPException, Request, status
 from .config import get_settings
 from .github.repositories import RepositoryStore
 from .github.webhooks import DeliveryStore, InvalidWebhookSignature, parse_event, verify_signature
+from .runs import CreateRunRequest
+from .storage.sqlite import RunStore
 
 settings = get_settings()
 app = FastAPI(title=settings.app_name, version="0.1.0")
 app.state.delivery_store = DeliveryStore()
 app.state.repository_store = RepositoryStore()
+app.state.run_store = RunStore(settings.database_path)
 
 
 @app.get("/health", tags=["operations"])
@@ -33,6 +36,28 @@ def get_repository(repository_id: int) -> dict[str, object]:
     if repository is None:
         raise HTTPException(status_code=404, detail="Repository not found")
     return repository.model_dump()
+
+
+@app.post("/api/v1/repositories/{repository_id}/runs", status_code=status.HTTP_201_CREATED, tags=["runs"])
+def create_run(repository_id: int, request: CreateRunRequest) -> dict[str, object]:
+    if app.state.repository_store.get(repository_id) is None:
+        raise HTTPException(status_code=404, detail="Repository not found")
+    return app.state.run_store.create_run(repository_id, request.trigger_type, request.base_sha)
+
+
+@app.get("/api/v1/runs/{run_id}", tags=["runs"])
+def get_run(run_id: str) -> dict[str, object]:
+    run = app.state.run_store.get_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return run
+
+
+@app.get("/api/v1/runs/{run_id}/events", tags=["runs"])
+def get_run_events(run_id: str) -> list[dict[str, object]]:
+    if app.state.run_store.get_run(run_id) is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return app.state.run_store.list_events(run_id)
 
 
 @app.post("/webhooks/github", status_code=status.HTTP_202_ACCEPTED, tags=["github"])
