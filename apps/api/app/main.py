@@ -10,7 +10,7 @@ from packages.context.context import build_context
 from .config import get_settings
 from .github.repositories import RepositoryStore
 from .github.webhooks import DeliveryStore, InvalidWebhookSignature, parse_event, verify_signature
-from .runs import CreateRunRequest, PlanRunRequest
+from .runs import ApprovalDecision, CreateRunRequest, PlanRunRequest
 from .storage.sqlalchemy import SqlAlchemyRunStore
 from .storage.sqlite import RunStore
 
@@ -84,6 +84,43 @@ def get_run_events(run_id: str) -> list[dict[str, object]]:
     if app.state.run_store.get_run(run_id) is None:
         raise HTTPException(status_code=404, detail="Run not found")
     return app.state.run_store.list_events(run_id)
+
+
+def _control_run(run_id: str) -> dict[str, object]:
+    run = app.state.run_store.get_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    if run["status"] in {"succeeded", "failed", "cancelled"}:
+        raise HTTPException(status_code=409, detail="Run is already terminal")
+    return run
+
+
+@app.post("/api/v1/runs/{run_id}/cancel", tags=["runs"])
+def cancel_run(run_id: str, decision: ApprovalDecision | None = None) -> dict[str, object]:
+    _control_run(run_id)
+    app.state.run_store.update_status(run_id, "cancelled")
+    app.state.run_store.append_event(run_id, "run.cancelled", {"rationale": decision.rationale if decision else ""})
+    return app.state.run_store.get_run(run_id)
+
+
+@app.post("/api/v1/runs/{run_id}/approve", tags=["runs"])
+def approve_run(run_id: str, decision: ApprovalDecision) -> dict[str, object]:
+    run = _control_run(run_id)
+    if run["status"] != "waiting_for_approval":
+        raise HTTPException(status_code=409, detail="Run is not waiting for approval")
+    app.state.run_store.update_status(run_id, "queued")
+    app.state.run_store.append_event(run_id, "run.approved", decision.model_dump())
+    return app.state.run_store.get_run(run_id)
+
+
+@app.post("/api/v1/runs/{run_id}/reject", tags=["runs"])
+def reject_run(run_id: str, decision: ApprovalDecision) -> dict[str, object]:
+    run = _control_run(run_id)
+    if run["status"] != "waiting_for_approval":
+        raise HTTPException(status_code=409, detail="Run is not waiting for approval")
+    app.state.run_store.update_status(run_id, "failed")
+    app.state.run_store.append_event(run_id, "run.rejected", decision.model_dump())
+    return app.state.run_store.get_run(run_id)
 
 
 @app.post("/api/v1/runs/{run_id}/plan", tags=["runs"])

@@ -7,6 +7,8 @@ from .queue import RedisQueue, RunJob
 
 
 class RunStore(Protocol):
+    def get_run(self, run_id: str) -> dict[str, Any] | None: ...
+
     def update_status(self, run_id: str, status: str) -> None: ...
 
     def append_event(self, run_id: str, event_type: str, payload: dict[str, Any]) -> None: ...
@@ -23,6 +25,9 @@ class RunWorker:
         job = self.queue.dequeue()
         if job is None:
             return False
+        current = self.store.get_run(job.run_id)
+        if current is None or current["status"] in {"cancelled", "failed", "succeeded"}:
+            return True
         self.store.update_status(job.run_id, "running")
         self.store.append_event(job.run_id, "run.started", {"stage": job.stage, "attempt": job.attempt})
         try:

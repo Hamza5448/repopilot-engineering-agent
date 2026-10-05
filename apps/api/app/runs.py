@@ -21,3 +21,8 @@ class PlanRunRequest(BaseModel):
     issue_title: str = Field(min_length=1, max_length=300)
     issue_body: str = Field(default="", max_length=20_000)
     files: list[FileSnapshot] = Field(default_factory=list, max_length=200)
+
+
+class ApprovalDecision(BaseModel):
+    gate: str = Field(default="publication", min_length=1, max_length=64)
+    rationale: str = Field(default="", max_length=2_000)
