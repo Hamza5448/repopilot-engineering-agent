@@ -51,10 +51,11 @@ class GitHubIssueEvent(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    action: str
+    action: str = "unknown"
     issue: dict[str, Any] = Field(default_factory=dict)
     repository: dict[str, Any] = Field(default_factory=dict)
     installation: dict[str, Any] | None = None
+    repositories_added: list[dict[str, Any]] = Field(default_factory=list)
 
 
 def parse_event(payload: bytes) -> GitHubIssueEvent:

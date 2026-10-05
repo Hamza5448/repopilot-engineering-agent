@@ -4,6 +4,7 @@ import json
 
 from fastapi.testclient import TestClient
 
+from apps.api.app.github.repositories import RepositoryStore
 from apps.api.app.github.webhooks import DeliveryStore, InvalidWebhookSignature, verify_signature
 from apps.api.app.main import app, settings
 
@@ -52,3 +53,25 @@ def test_github_webhook_accepts_and_deduplicates(monkeypatch) -> None:
     assert first.json()["status"] == "accepted"
     assert second.status_code == 202
     assert second.json()["status"] == "duplicate"
+
+
+def test_installation_repositories_event_onboards_repositories(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "github_webhook_secret", SECRET)
+    app.state.delivery_store = DeliveryStore()
+    app.state.repository_store = RepositoryStore()
+    body = json.dumps(
+        {
+            "installation": {"id": 77},
+            "repositories_added": [{"id": 123, "full_name": "hamza/demo"}],
+        }
+    ).encode()
+    headers = {
+        "x-github-delivery": "delivery-install-1",
+        "x-github-event": "installation_repositories",
+        "x-hub-signature-256": signed(body),
+    }
+    response = TestClient(app).post("/webhooks/github", content=body, headers=headers)
+    assert response.status_code == 202
+    repository = TestClient(app).get("/api/v1/repositories/123")
+    assert repository.status_code == 200
+    assert repository.json()["installation_id"] == 77
