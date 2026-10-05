@@ -5,9 +5,16 @@ from typing import Any, Protocol
 
 from packages.agents.planner import Planner
 from packages.context.context import build_context
-from packages.github.publisher import CheckSpec, PublishedResource
+from packages.github.publisher import (
+    BranchSpec,
+    CheckSpec,
+    CommitSpec,
+    PublishedResource,
+    PullRequestSpec,
+)
 from packages.sandbox.executor import LocalSandboxExecutor
 from packages.sandbox.policy import CommandRequest
+from packages.sandbox.workspace import RepositoryWorkspace
 from packages.validation.results import ValidationKind
 from packages.validation.runner import ValidationRunner
 
@@ -22,6 +29,14 @@ class RunStore(Protocol):
 
 class CheckPublisher(Protocol):
     def publish(self, run_id: str, passed: bool, summary: str) -> PublishedResource: ...
+
+
+class GitHubPublisher(Protocol):
+    def create_branch(self, spec: BranchSpec) -> PublishedResource: ...
+
+    def commit_patch(self, spec: CommitSpec) -> PublishedResource: ...
+
+    def open_pull_request(self, spec: PullRequestSpec) -> PublishedResource: ...
 
 
 class LocalCheckPublisher:
@@ -48,11 +63,13 @@ class StageDispatcher:
         queue: RedisQueue,
         check_publisher: CheckPublisher | None = None,
         workspace_root: str = "/tmp/repopilot",
+        github_publisher: GitHubPublisher | None = None,
     ) -> None:
         self.store = store
         self.queue = queue
         self.check_publisher = check_publisher or LocalCheckPublisher()
         self.workspace_root = workspace_root
+        self.github_publisher = github_publisher
 
     def _next(self, job: RunJob, stage: str) -> None:
         self.store.update_status(job.run_id, "queued")
@@ -74,20 +91,45 @@ class StageDispatcher:
             )
             plan = Planner().plan(context)
             self.store.append_event(job.run_id, "run.planned", {"context": context.model_dump(), "plan": plan.model_dump()})
-            self._next(job, "validate")
+            self._next(job, "implement")
+            return False
+
+        if job.stage == "implement":
+            if not job.repository_url or not job.patch:
+                self.store.append_event(job.run_id, "run.implementation.skipped", {"reason": "no_patch_supplied"})
+                self._next(job, "validate")
+                return False
+            workspace = RepositoryWorkspace(Path(self.workspace_root) / job.run_id)
+            workspace.clone_at(job.repository_url, job.base_sha)
+            changed = workspace.apply_patch(job.patch)
+            changed_files = {path: (workspace.path / path).read_text() for path in changed}
+            self.store.append_event(job.run_id, "run.implemented", {"changed_files": changed})
+            self._next(job.model_copy(update={"workspace_path": str(workspace.path), "changed_files": changed_files}), "validate")
             return False
 
         if job.stage == "validate":
-            workspace = Path(self.workspace_root) / job.run_id
+            workspace = Path(job.workspace_path) if job.workspace_path else Path(self.workspace_root) / job.run_id
+            command = CommandRequest(command="python", args=["-m", "pytest"]) if (workspace / "tests").exists() else CommandRequest(command="python", args=["--version"])
             result = ValidationRunner(LocalSandboxExecutor(workspace)).run(
                 ValidationKind.TEST,
-                CommandRequest(command="python", args=["--version"]),
+                command,
             )
             self.store.append_event(job.run_id, "run.validated", result.model_dump())
             if not result.passed:
                 self.store.update_status(job.run_id, "failed")
                 self.store.append_event(job.run_id, "run.failed", {"reason": "validation_failed"})
                 return True
+            self._next(job, "publish")
+            return False
+
+        if job.stage == "publish":
+            if self.github_publisher and job.changed_files:
+                branch = self.github_publisher.create_branch(BranchSpec(name=job.branch_name, base_sha=job.base_sha))
+                commit = self.github_publisher.commit_patch(CommitSpec(branch=job.branch_name, message=job.commit_message, files=job.changed_files))
+                pull_request = self.github_publisher.open_pull_request(PullRequestSpec(branch=job.branch_name, title=job.commit_message))
+                self.store.append_event(job.run_id, "run.pull_request.published", {"branch": branch.model_dump(), "commit": commit.model_dump(), "pull_request": pull_request.model_dump()})
+            else:
+                self.store.append_event(job.run_id, "run.publication.skipped", {"reason": "github_publisher_not_configured_or_no_patch"})
             self._next(job, "publish_check")
             return False
 

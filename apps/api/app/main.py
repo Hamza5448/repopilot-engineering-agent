@@ -62,6 +62,10 @@ def create_run(repository_id: int, request: CreateRunRequest) -> dict[str, objec
             issue_title=request.issue_title,
             issue_body=request.issue_body,
             files=request.files,
+            repository_url=request.repository_url,
+            patch=request.patch,
+            branch_name=request.branch_name,
+            commit_message=request.commit_message,
         )
     )
     return run

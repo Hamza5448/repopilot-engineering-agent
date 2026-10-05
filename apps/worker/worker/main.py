@@ -28,8 +28,11 @@ def main() -> None:
     repository = os.getenv("GITHUB_REPOSITORY")
     token = os.getenv("GITHUB_TOKEN")
     if owner and repository and token:
-        check_publisher = GitHubCheckPublisher(GitHubPublisherClient(owner, repository, token))
-    dispatcher = StageDispatcher(store, queue, check_publisher)
+        github_publisher = GitHubPublisherClient(owner, repository, token)
+        check_publisher = GitHubCheckPublisher(github_publisher)
+    else:
+        github_publisher = None
+    dispatcher = StageDispatcher(store, queue, check_publisher, github_publisher=github_publisher)
     worker = RunWorker(queue, store, dispatcher.dispatch)
     while True:
         worker.run_once()

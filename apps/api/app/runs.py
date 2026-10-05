@@ -11,6 +11,10 @@ class CreateRunRequest(BaseModel):
     issue_title: str = Field(default="", max_length=300)
     issue_body: str = Field(default="", max_length=20_000)
     files: list[FileSnapshot] = Field(default_factory=list, max_length=200)
+    repository_url: str | None = None
+    patch: str | None = None
+    branch_name: str = Field(default="agent/repopilot-change", pattern=r"^[a-z0-9][a-z0-9/_-]{2,80}$")
+    commit_message: str = Field(default="Apply RepoPilot change", max_length=200)
 
 
 class PlanRunRequest(BaseModel):

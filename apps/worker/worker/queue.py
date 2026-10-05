@@ -17,6 +17,12 @@ class RunJob(BaseModel):
     issue_title: str = ""
     issue_body: str = ""
     files: list[FileSnapshot] = Field(default_factory=list)
+    repository_url: str | None = None
+    patch: str | None = None
+    branch_name: str = "agent/repopilot-change"
+    commit_message: str = "Apply RepoPilot change"
+    workspace_path: str | None = None
+    changed_files: dict[str, str] = Field(default_factory=dict)
 
 
 class RedisQueue:
