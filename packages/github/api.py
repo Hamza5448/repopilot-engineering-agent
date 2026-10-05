@@ -50,7 +50,45 @@ class GitHubPublisherClient(GitHubPublisher):
         return self._resource(response)
 
     def commit_patch(self, spec: CommitSpec) -> PublishedResource:
-        raise NotImplementedError("Patch-to-tree publication will be added with the workspace publisher")
+        if not spec.files:
+            raise ValueError("Commit publication requires changed file contents")
+        ref = self.client.get(
+            f"/repos/{self.owner}/{self.repository}/git/ref/heads/{spec.branch}", headers=self.headers
+        )
+        ref.raise_for_status()
+        parent_sha = ref.json()["object"]["sha"]
+        commit = self.client.get(
+            f"/repos/{self.owner}/{self.repository}/git/commits/{parent_sha}", headers=self.headers
+        )
+        commit.raise_for_status()
+        base_tree = commit.json()["tree"]["sha"]
+        tree = []
+        for path, content in spec.files.items():
+            blob = self.client.post(
+                f"/repos/{self.owner}/{self.repository}/git/blobs",
+                headers=self.headers,
+                json={"content": content, "encoding": "utf-8"},
+            )
+            blob.raise_for_status()
+            tree.append({"path": path, "mode": "100644", "type": "blob", "sha": blob.json()["sha"]})
+        created_tree = self.client.post(
+            f"/repos/{self.owner}/{self.repository}/git/trees",
+            headers=self.headers,
+            json={"base_tree": base_tree, "tree": tree},
+        )
+        created_tree.raise_for_status()
+        created_commit = self.client.post(
+            f"/repos/{self.owner}/{self.repository}/git/commits",
+            headers=self.headers,
+            json={"message": spec.message, "tree": created_tree.json()["sha"], "parents": [parent_sha]},
+        )
+        created_commit.raise_for_status()
+        updated_ref = self.client.patch(
+            f"/repos/{self.owner}/{self.repository}/git/refs/heads/{spec.branch}",
+            headers=self.headers,
+            json={"sha": created_commit.json()["sha"], "force": False},
+        )
+        return self._resource(updated_ref)
 
     def open_pull_request(self, spec: PullRequestSpec) -> PublishedResource:
         response = self.client.post(

@@ -13,7 +13,8 @@ class BranchSpec(BaseModel):
 class CommitSpec(BaseModel):
     branch: str
     message: str = Field(min_length=1, max_length=200)
-    patch: str = Field(min_length=1)
+    patch: str = ""
+    files: dict[str, str] = Field(default_factory=dict)
 
 
 class PullRequestSpec(BaseModel):
