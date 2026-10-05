@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     database_path: str = ".local/repopilot.db"
     github_webhook_secret: str | None = None
+    github_app_id: int | None = None
+    github_app_private_key: str | None = None
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra="ignore")
 
