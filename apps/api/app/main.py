@@ -54,7 +54,16 @@ def create_run(repository_id: int, request: CreateRunRequest) -> dict[str, objec
     if app.state.repository_store.get(repository_id) is None:
         raise HTTPException(status_code=404, detail="Repository not found")
     run = app.state.run_store.create_run(repository_id, request.trigger_type, request.base_sha)
-    app.state.queue.enqueue(RunJob(run_id=run["id"], repository_id=repository_id))
+    app.state.queue.enqueue(
+        RunJob(
+            run_id=run["id"],
+            repository_id=repository_id,
+            base_sha=request.base_sha,
+            issue_title=request.issue_title,
+            issue_body=request.issue_body,
+            files=request.files,
+        )
+    )
     return run
 
 

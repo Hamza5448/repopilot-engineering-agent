@@ -26,7 +26,9 @@ class RunWorker:
         self.store.update_status(job.run_id, "running")
         self.store.append_event(job.run_id, "run.started", {"stage": job.stage, "attempt": job.attempt})
         try:
-            self.handler(job)
+            terminal = self.handler(job)
+            if terminal is False:
+                return True
         except Exception as exc:  # noqa: BLE001
             if job.attempt < self.max_attempts:
                 retry = job.model_copy(update={"attempt": job.attempt + 1})

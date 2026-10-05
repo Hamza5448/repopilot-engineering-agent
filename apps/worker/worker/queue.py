@@ -3,14 +3,20 @@
 import json
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from packages.context.context import FileSnapshot
 
 
 class RunJob(BaseModel):
     run_id: str
     repository_id: int
+    base_sha: str = "unknown"
     stage: str = "triage"
     attempt: int = 1
+    issue_title: str = ""
+    issue_body: str = ""
+    files: list[FileSnapshot] = Field(default_factory=list)
 
 
 class RedisQueue:

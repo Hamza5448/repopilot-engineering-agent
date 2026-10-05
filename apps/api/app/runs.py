@@ -8,6 +8,9 @@ from packages.context.context import FileSnapshot
 class CreateRunRequest(BaseModel):
     trigger_type: str = Field(min_length=1, max_length=64)
     base_sha: str = Field(min_length=7, max_length=64)
+    issue_title: str = Field(default="", max_length=300)
+    issue_body: str = Field(default="", max_length=20_000)
+    files: list[FileSnapshot] = Field(default_factory=list, max_length=200)
 
 
 class PlanRunRequest(BaseModel):

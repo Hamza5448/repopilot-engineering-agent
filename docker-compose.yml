@@ -9,6 +9,9 @@ services:
       STORAGE_BACKEND: postgres
       DATABASE_URL: postgresql+psycopg://repopilot:repopilot@postgres:5432/repopilot
       REDIS_URL: redis://redis:6379/0
+      GITHUB_OWNER: ${GITHUB_OWNER:-}
+      GITHUB_REPOSITORY: ${GITHUB_REPOSITORY:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-local-development-secret}
     ports:
       - "8000:8000"
