@@ -16,6 +16,17 @@ class Settings(BaseSettings):
     github_webhook_secret: str | None = None
     github_app_id: int | None = None
     github_app_private_key: str | None = None
+    github_app_private_key_path: str | None = None
+    github_owner: str | None = None
+    github_repository: str | None = None
+
+    @property
+    def github_credentials_configured(self) -> bool:
+        return bool(
+            self.github_app_id
+            and (self.github_app_private_key or self.github_app_private_key_path)
+            and self.github_webhook_secret
+        )
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra="ignore")
 
