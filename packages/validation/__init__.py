@@ -1,0 +1,1 @@
+"""Normalized validation result contracts."""
