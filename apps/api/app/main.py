@@ -9,13 +9,18 @@ from .config import get_settings
 from .github.repositories import RepositoryStore
 from .github.webhooks import DeliveryStore, InvalidWebhookSignature, parse_event, verify_signature
 from .runs import CreateRunRequest, PlanRunRequest
+from .storage.sqlalchemy import SqlAlchemyRunStore
 from .storage.sqlite import RunStore
 
 settings = get_settings()
 app = FastAPI(title=settings.app_name, version="0.1.0")
 app.state.delivery_store = DeliveryStore()
 app.state.repository_store = RepositoryStore()
-app.state.run_store = RunStore(settings.database_path)
+app.state.run_store = (
+    SqlAlchemyRunStore(settings.database_url)
+    if settings.storage_backend == "postgres"
+    else RunStore(settings.database_path)
+)
 
 
 @app.get("/health", tags=["operations"])

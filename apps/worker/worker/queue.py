@@ -1,0 +1,29 @@
+"""Redis queue contract for durable background run dispatch."""
+
+import json
+from typing import Any
+
+from pydantic import BaseModel
+
+
+class RunJob(BaseModel):
+    run_id: str
+    repository_id: int
+    stage: str = "triage"
+
+
+class RedisQueue:
+    def __init__(self, client: Any, queue_name: str = "repopilot:runs") -> None:
+        self.client = client
+        self.queue_name = queue_name
+
+    def enqueue(self, job: RunJob) -> None:
+        self.client.rpush(self.queue_name, job.model_dump_json())
+
+    def dequeue(self) -> RunJob | None:
+        payload = self.client.lpop(self.queue_name)
+        if payload is None:
+            return None
+        if isinstance(payload, bytes):
+            payload = payload.decode()
+        return RunJob.model_validate(json.loads(payload))

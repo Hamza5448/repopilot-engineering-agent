@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://repopilot:repopilot@localhost:5432/repopilot"
     redis_url: str = "redis://localhost:6379/0"
     database_path: str = ".local/repopilot.db"
+    storage_backend: str = "sqlite"
     github_webhook_secret: str | None = None
     github_app_id: int | None = None
     github_app_private_key: str | None = None
