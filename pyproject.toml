@@ -23,6 +23,9 @@ dev = [
 [tool.ruff]
 line-length = 100
 
+[tool.setuptools.packages.find]
+include = ["apps*", "packages*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
