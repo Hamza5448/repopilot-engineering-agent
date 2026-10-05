@@ -73,3 +73,10 @@ class RunStore:
             {**dict(row), "payload": json.loads(row["payload"])}
             for row in rows
         ]
+
+    def append_event(self, run_id: str, event_type: str, payload: dict[str, Any]) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT INTO run_events (run_id, event_type, payload) VALUES (?, ?, ?)",
+                (run_id, event_type, json.dumps(payload)),
+            )
