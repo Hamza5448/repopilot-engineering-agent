@@ -80,3 +80,7 @@ class RunStore:
                 "INSERT INTO run_events (run_id, event_type, payload) VALUES (?, ?, ?)",
                 (run_id, event_type, json.dumps(payload)),
             )
+
+    def update_status(self, run_id: str, status: str) -> None:
+        with self._connect() as connection:
+            connection.execute("UPDATE agent_runs SET status = ? WHERE id = ?", (status, run_id))

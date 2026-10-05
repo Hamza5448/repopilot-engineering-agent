@@ -58,6 +58,12 @@ class SqlAlchemyRunStore:
         with Session(self.engine) as session, session.begin():
             session.add(RunEventRow(run_id=run_id, event_type=event_type, payload=json.dumps(payload), created_at=datetime.now(UTC)))
 
+    def update_status(self, run_id: str, status: str) -> None:
+        with Session(self.engine) as session, session.begin():
+            row = session.get(AgentRunRow, run_id)
+            if row is not None:
+                row.status = status
+
     def list_events(self, run_id: str) -> list[dict[str, Any]]:
         with Session(self.engine) as session:
             rows = session.scalars(select(RunEventRow).where(RunEventRow.run_id == run_id).order_by(RunEventRow.id)).all()

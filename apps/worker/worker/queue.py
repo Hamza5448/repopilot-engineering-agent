@@ -10,6 +10,7 @@ class RunJob(BaseModel):
     run_id: str
     repository_id: int
     stage: str = "triage"
+    attempt: int = 1
 
 
 class RedisQueue:

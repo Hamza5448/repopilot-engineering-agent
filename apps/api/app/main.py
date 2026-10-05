@@ -1,7 +1,9 @@
 """HTTP boundary for the initial RepoPilot vertical slice."""
 
+import redis
 from fastapi import FastAPI, Header, HTTPException, Request, status
 
+from apps.worker.worker.queue import RedisQueue, RunJob
 from packages.agents.planner import Planner
 from packages.context.context import build_context
 
@@ -21,6 +23,7 @@ app.state.run_store = (
     if settings.storage_backend == "postgres"
     else RunStore(settings.database_path)
 )
+app.state.queue = RedisQueue(redis.Redis.from_url(settings.redis_url))
 
 
 @app.get("/health", tags=["operations"])
@@ -50,7 +53,9 @@ def get_repository(repository_id: int) -> dict[str, object]:
 def create_run(repository_id: int, request: CreateRunRequest) -> dict[str, object]:
     if app.state.repository_store.get(repository_id) is None:
         raise HTTPException(status_code=404, detail="Repository not found")
-    return app.state.run_store.create_run(repository_id, request.trigger_type, request.base_sha)
+    run = app.state.run_store.create_run(repository_id, request.trigger_type, request.base_sha)
+    app.state.queue.enqueue(RunJob(run_id=run["id"], repository_id=repository_id))
+    return run
 
 
 @app.get("/api/v1/runs/{run_id}", tags=["runs"])
