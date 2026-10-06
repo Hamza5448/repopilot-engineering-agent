@@ -45,6 +45,18 @@ class DeliveryStore:
                 self._seen.remove(self._order.popleft())
             return True
 
+    def release(self, delivery_id: str) -> None:
+        """Release a delivery after downstream processing fails before acknowledgement."""
+
+        with self._lock:
+            if delivery_id not in self._seen:
+                return
+            self._seen.remove(delivery_id)
+            try:
+                self._order.remove(delivery_id)
+            except ValueError:
+                pass
+
 
 class GitHubIssueEvent(BaseModel):
     """Minimum typed contract needed to start issue-triggered work."""

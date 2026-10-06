@@ -1,5 +1,7 @@
 """HTTP boundary for the initial RepoPilot vertical slice."""
 
+import logging
+
 import httpx
 import redis
 from fastapi import FastAPI, Header, HTTPException, Request, status
@@ -9,6 +11,7 @@ from packages.agents.planner import Planner
 from packages.context.context import build_context
 from packages.github.api import GitHubInstallationTokenProvider, GitHubPublisherClient
 from packages.github.auth import GitHubAppAuthenticator, GitHubAppConfigurationError
+from packages.observability.logging import log_event
 
 from .config import get_settings
 from .github.repositories import RepositoryStore
@@ -18,6 +21,7 @@ from .storage.sqlalchemy import SqlAlchemyRunStore
 from .storage.sqlite import RunStore
 
 settings = get_settings()
+logger = logging.getLogger("repopilot.api")
 app = FastAPI(title=settings.app_name, version="0.1.0")
 app.state.delivery_store = DeliveryStore()
 app.state.repository_store = RepositoryStore()
@@ -179,12 +183,14 @@ async def github_webhook(
         raise HTTPException(status_code=400, detail="Missing GitHub delivery ID")
 
     payload = await request.body()
+    log_event(logger, "webhook_received", delivery_id=x_github_delivery, event=x_github_event or "unknown")
     try:
         verify_signature(payload, x_hub_signature_256, settings.github_webhook_secret)
     except InvalidWebhookSignature as exc:
         raise HTTPException(status_code=401, detail="Invalid webhook signature") from exc
 
     if not app.state.delivery_store.claim(x_github_delivery):
+        log_event(logger, "webhook_duplicate", delivery_id=x_github_delivery)
         return {"status": "duplicate", "delivery_id": x_github_delivery}
 
     if x_github_event == "installation_repositories":
@@ -192,19 +198,38 @@ async def github_webhook(
         installation_id = event.installation.get("id") if event.installation else None
         for repository in event.model_dump().get("repositories_added", []):
             app.state.repository_store.upsert_from_github(repository, installation_id)
+        log_event(logger, "installation_repositories_processed", delivery_id=x_github_delivery)
     elif x_github_event == "issues":
         event = parse_event(payload)
         labels = event.issue.get("labels", [])
-        triggered = x_github_event == "issues" and event.action in {"opened", "reopened", "labeled"} and any(
+        supported_action = event.action in {"opened", "reopened", "labeled"}
+        has_trigger_label = any(
             label.get("name") == "repopilot" for label in labels if isinstance(label, dict)
         )
-        if triggered:
+        if not supported_action or not has_trigger_label:
+            log_event(
+                logger,
+                "issue_event_ignored",
+                delivery_id=x_github_delivery,
+                action=event.action,
+                reason="unsupported_action" if not supported_action else "missing_repopilot_label",
+            )
+        else:
             repository = event.repository
             installation_id = event.installation.get("id") if event.installation else None
             full_name = repository.get("full_name", "")
             if not installation_id or not repository.get("id") or "/" not in full_name:
                 raise HTTPException(status_code=400, detail="Issue event lacks repository installation context")
             owner, repository_name = full_name.split("/", 1)
+            log_event(
+                logger,
+                "issue_trigger_accepted",
+                delivery_id=x_github_delivery,
+                action=event.action,
+                repository=full_name,
+                repository_id=repository["id"],
+                installation_id=installation_id,
+            )
             app.state.repository_store.upsert_from_github(repository, installation_id)
             try:
                 base_sha = app.state.github_sha_resolver(
@@ -214,18 +239,36 @@ async def github_webhook(
                     installation_id,
                 )
             except (GitHubAppConfigurationError, OSError, httpx.HTTPError) as exc:
+                app.state.delivery_store.release(x_github_delivery)
+                log_event(logger, "issue_trigger_failed", stage="sha_resolution", repository=full_name)
                 raise HTTPException(status_code=503, detail="Unable to resolve repository base revision") from exc
-            run = app.state.run_store.create_run(repository["id"], "github_issue", base_sha)
-            issue = event.issue
-            app.state.queue.enqueue(
-                RunJob(
-                    run_id=run["id"],
-                    repository_id=repository["id"],
-                    base_sha=base_sha,
-                    issue_title=issue.get("title", ""),
-                    issue_body=issue.get("body", "") or "",
-                    repository_url=f"https://github.com/{full_name}.git",
+            log_event(logger, "issue_sha_resolved", repository=full_name, base_sha=base_sha)
+            try:
+                run = app.state.run_store.create_run(repository["id"], "github_issue", base_sha)
+                log_event(logger, "run_created", run_id=run["id"], repository_id=repository["id"])
+                app.state.run_store.append_event(
+                    run["id"],
+                    "run.trigger.accepted",
+                    {"delivery_id": x_github_delivery, "action": event.action},
                 )
-            )
+                issue = event.issue
+                app.state.queue.enqueue(
+                    RunJob(
+                        run_id=run["id"],
+                        repository_id=repository["id"],
+                        base_sha=base_sha,
+                        issue_title=issue.get("title", ""),
+                        issue_body=issue.get("body", "") or "",
+                        repository_url=f"https://github.com/{full_name}.git",
+                    )
+                )
+                app.state.run_store.append_event(run["id"], "run.enqueued", {"queue": "repopilot:runs"})
+                log_event(logger, "run_enqueued", run_id=run["id"], queue="repopilot:runs")
+            except Exception as exc:
+                app.state.delivery_store.release(x_github_delivery)
+                log_event(logger, "issue_trigger_failed", stage="persistence_or_enqueue", repository=full_name)
+                raise HTTPException(status_code=503, detail="Unable to enqueue issue run") from exc
+    else:
+        log_event(logger, "webhook_ignored", delivery_id=x_github_delivery, reason="unsupported_event")
 
     return {"status": "accepted", "delivery_id": x_github_delivery}
