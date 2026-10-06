@@ -15,9 +15,11 @@ services:
       GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-local-development-secret}
       GITHUB_APP_ID: ${GITHUB_APP_ID:-}
       GITHUB_APP_PRIVATE_KEY: ${GITHUB_APP_PRIVATE_KEY:-}
-      GITHUB_APP_PRIVATE_KEY_PATH: ${GITHUB_APP_PRIVATE_KEY_PATH:-}
+      GITHUB_APP_PRIVATE_KEY_PATH: /run/secrets/github-app-private-key.pem
     ports:
       - "8000:8000"
+    volumes:
+      - "D:/RepoPilotSecrets/github-app-private-key.pem:/run/secrets/github-app-private-key.pem:ro"
     depends_on:
       postgres:
         condition: service_healthy
@@ -33,6 +35,15 @@ services:
       APP_ENV: compose
       DATABASE_URL: postgresql+psycopg://repopilot:repopilot@postgres:5432/repopilot
       REDIS_URL: redis://redis:6379/0
+      GITHUB_APP_ID: ${GITHUB_APP_ID:-}
+      GITHUB_APP_PRIVATE_KEY: ${GITHUB_APP_PRIVATE_KEY:-}
+      GITHUB_APP_PRIVATE_KEY_PATH: /run/secrets/github-app-private-key.pem
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-}
+      GITHUB_OWNER: ${GITHUB_OWNER:-}
+      GITHUB_REPOSITORY: ${GITHUB_REPOSITORY:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+    volumes:
+      - "D:/RepoPilotSecrets/github-app-private-key.pem:/run/secrets/github-app-private-key.pem:ro"
     depends_on:
       postgres:
         condition: service_healthy

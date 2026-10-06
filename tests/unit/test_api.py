@@ -13,3 +13,4 @@ def test_readiness_endpoint() -> None:
     response = TestClient(app).get("/ready")
     assert response.status_code == 200
     assert response.json()["status"] == "ready"
+    assert isinstance(response.json()["github_app_configured"], bool)

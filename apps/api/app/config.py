@@ -4,6 +4,8 @@ from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from packages.github.auth import GitHubAppAuthenticator, GitHubAppConfigurationError
+
 
 class Settings(BaseSettings):
     app_name: str = "RepoPilot API"
@@ -22,11 +24,17 @@ class Settings(BaseSettings):
 
     @property
     def github_credentials_configured(self) -> bool:
-        return bool(
-            self.github_app_id
-            and (self.github_app_private_key or self.github_app_private_key_path)
-            and self.github_webhook_secret
-        )
+        if not self.github_app_id or not self.github_webhook_secret:
+            return False
+        try:
+            GitHubAppAuthenticator(
+                self.github_app_id,
+                private_key=self.github_app_private_key,
+                private_key_path=self.github_app_private_key_path,
+            ).validate()
+        except GitHubAppConfigurationError:
+            return False
+        return True
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra="ignore")
 

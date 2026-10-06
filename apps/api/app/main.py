@@ -32,11 +32,11 @@ def health() -> dict[str, str]:
 
 
 @app.get("/ready", tags=["operations"])
-def ready() -> dict[str, str]:
+def ready() -> dict[str, object]:
     return {
         "status": "ready",
         "environment": settings.app_env,
-        "github_app_configured": str(settings.github_credentials_configured).lower(),
+        "github_app_configured": settings.github_credentials_configured,
     }
 
 
