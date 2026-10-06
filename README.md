@@ -1,5 +1,5 @@
 # RepoPilot
-
+Welcome to RepoPilot Demo
 RepoPilot is a policy-controlled AI software engineering agent that reacts to GitHub events, builds repository context, works in isolated execution environments, validates its own patches, and reports evidence through GitHub Checks. When authorized, it can open review-ready pull requests without bypassing human governance.
 
 This repository is the implementation workspace for the RepoPilot product specification. The project is intentionally organized as a production-oriented monorepo so the backend, worker runtime, frontend, database, integrations, testing, and operations can evolve together.
