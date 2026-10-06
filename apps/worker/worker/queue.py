@@ -11,6 +11,10 @@ from packages.context.context import FileSnapshot
 class RunJob(BaseModel):
     run_id: str
     repository_id: int
+    installation_id: int | None = None
+    github_owner: str | None = None
+    github_repository: str | None = None
+    base_branch: str = "main"
     base_sha: str = "unknown"
     stage: str = "triage"
     attempt: int = 1

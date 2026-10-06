@@ -8,8 +8,10 @@ import redis
 
 from apps.api.app.storage.sqlalchemy import SqlAlchemyRunStore
 from packages.github.api import GitHubPublisherClient
+from packages.github.auth import GitHubAppConfigurationError
 from packages.observability.logging import log_event
 
+from .github import GitHubAppPublisherFactory
 from .pipeline import GitHubCheckPublisher, LocalCheckPublisher, StageDispatcher
 from .queue import RedisQueue, RunJob
 from .runtime import RunWorker
@@ -32,17 +34,38 @@ def main() -> None:
     owner = os.getenv("GITHUB_OWNER")
     repository = os.getenv("GITHUB_REPOSITORY")
     token = os.getenv("GITHUB_TOKEN")
+    github_publisher_factory = None
+    app_id = os.getenv("GITHUB_APP_ID")
+    if app_id and (os.getenv("GITHUB_APP_PRIVATE_KEY") or os.getenv("GITHUB_APP_PRIVATE_KEY_PATH")):
+        try:
+            github_publisher_factory = GitHubAppPublisherFactory(
+                int(app_id),
+                private_key=os.getenv("GITHUB_APP_PRIVATE_KEY"),
+                private_key_path=os.getenv("GITHUB_APP_PRIVATE_KEY_PATH"),
+            )
+            github_publisher_factory.authenticator.validate()
+        except (ValueError, GitHubAppConfigurationError) as exc:
+            log_event(logger, "github_app_publisher_unavailable", reason=type(exc).__name__)
     if owner and repository and token:
         github_publisher = GitHubPublisherClient(owner, repository, token)
         check_publisher = GitHubCheckPublisher(github_publisher)
     else:
         github_publisher = None
-    dispatcher = StageDispatcher(store, queue, check_publisher, github_publisher=github_publisher)
+    dispatcher = StageDispatcher(
+        store,
+        queue,
+        check_publisher,
+        github_publisher=github_publisher,
+        github_publisher_factory=github_publisher_factory.for_job if github_publisher_factory else None,
+        github_token_factory=(github_publisher_factory.token_for if github_publisher_factory else (lambda job: token))
+        if token
+        else None,
+    )
     log_event(
         logger,
         "worker_started",
         queue="repopilot:runs",
-        github_publisher_configured=github_publisher is not None,
+        github_publisher_configured=github_publisher is not None or github_publisher_factory is not None,
         database_configured=bool(os.getenv("DATABASE_URL")),
         redis_configured=bool(os.getenv("REDIS_URL")),
     )

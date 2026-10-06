@@ -1,5 +1,6 @@
 """Exact-SHA repository workspace and patch application boundary."""
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -15,7 +16,7 @@ class RepositoryWorkspace:
         self.path = Path(path).resolve()
         self.policy = policy or CommandPolicy()
 
-    def _git(self, *args: str, input_text: str | None = None) -> str:
+    def _git(self, *args: str, input_text: str | None = None, env: dict[str, str] | None = None) -> str:
         result = subprocess.run(
             ["git", *args],
             cwd=self.path if self.path.exists() else None,
@@ -24,21 +25,30 @@ class RepositoryWorkspace:
             capture_output=True,
             check=False,
             shell=False,
+            env=env,
         )
         if result.returncode:
             raise WorkspaceError(result.stderr.strip() or "Git operation failed")
         return result.stdout.strip()
 
-    def clone_at(self, repository_url: str, commit_sha: str) -> str:
+    def clone_at(self, repository_url: str, commit_sha: str, access_token: str | None = None) -> str:
         if self.path.exists() and any(self.path.iterdir()):
             raise WorkspaceError("Workspace must be empty before cloning")
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        clone_env = None
+        if access_token:
+            clone_env = os.environ.copy()
+            clone_env["GIT_CONFIG_COUNT"] = "1"
+            clone_env["GIT_CONFIG_KEY_0"] = "http.extraheader"
+            clone_env["GIT_CONFIG_VALUE_0"] = f"AUTHORIZATION: bearer {access_token}"
+            clone_env["GIT_TERMINAL_PROMPT"] = "0"
         result = subprocess.run(
             ["git", "clone", "--no-checkout", repository_url, str(self.path)],
             capture_output=True,
             text=True,
             check=False,
             shell=False,
+            env=clone_env,
         )
         if result.returncode:
             raise WorkspaceError(result.stderr.strip() or "Repository clone failed")

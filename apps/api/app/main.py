@@ -256,6 +256,10 @@ async def github_webhook(
                     RunJob(
                         run_id=run["id"],
                         repository_id=repository["id"],
+                        installation_id=installation_id,
+                        github_owner=owner,
+                        github_repository=repository_name,
+                        base_branch=repository.get("default_branch", "main"),
                         base_sha=base_sha,
                         issue_title=issue.get("title", ""),
                         issue_body=issue.get("body", "") or "",

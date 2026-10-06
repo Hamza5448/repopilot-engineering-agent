@@ -60,6 +60,9 @@ def test_labeled_issue_creates_exact_sha_run(monkeypatch, tmp_path) -> None:
     assert response.status_code == 202
     assert len(app.state.queue.jobs) == 1
     assert app.state.queue.jobs[0].base_sha == "exact-base-sha"
+    assert app.state.queue.jobs[0].installation_id == 55
+    assert app.state.queue.jobs[0].github_owner == "owner"
+    assert app.state.queue.jobs[0].github_repository == "repo"
     assert app.state.queue.jobs[0].issue_title == "Fix parser"
     run = app.state.run_store.get_run(app.state.queue.jobs[0].run_id)
     assert run["trigger_type"] == "github_issue"

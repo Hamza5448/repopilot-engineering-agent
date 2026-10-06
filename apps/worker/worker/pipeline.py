@@ -1,5 +1,6 @@
 """Stage dispatcher connecting planning, validation, and Check publication."""
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -64,12 +65,21 @@ class StageDispatcher:
         check_publisher: CheckPublisher | None = None,
         workspace_root: str = "/tmp/repopilot",
         github_publisher: GitHubPublisher | None = None,
+        github_publisher_factory: Callable[[RunJob], GitHubPublisher] | None = None,
+        github_token_factory: Callable[[RunJob], str] | None = None,
     ) -> None:
         self.store = store
         self.queue = queue
         self.check_publisher = check_publisher or LocalCheckPublisher()
         self.workspace_root = workspace_root
         self.github_publisher = github_publisher
+        self.github_publisher_factory = github_publisher_factory
+        self.github_token_factory = github_token_factory
+
+    def _publisher_for(self, job: RunJob) -> GitHubPublisher | None:
+        if self.github_publisher_factory is not None and job.installation_id:
+            return self.github_publisher_factory(job)
+        return self.github_publisher
 
     def _next(self, job: RunJob, stage: str) -> None:
         self.store.update_status(job.run_id, "queued")
@@ -100,7 +110,8 @@ class StageDispatcher:
                 self._next(job, "validate")
                 return False
             workspace = RepositoryWorkspace(Path(self.workspace_root) / job.run_id)
-            workspace.clone_at(job.repository_url, job.base_sha)
+            access_token = self.github_token_factory(job) if self.github_token_factory else None
+            workspace.clone_at(job.repository_url, job.base_sha, access_token=access_token)
             changed = workspace.apply_patch(job.patch)
             changed_files = {path: (workspace.path / path).read_text() for path in changed}
             self.store.append_event(job.run_id, "run.implemented", {"changed_files": changed})
@@ -123,10 +134,11 @@ class StageDispatcher:
             return False
 
         if job.stage == "publish":
-            if self.github_publisher and job.changed_files:
-                branch = self.github_publisher.create_branch(BranchSpec(name=job.branch_name, base_sha=job.base_sha))
-                commit = self.github_publisher.commit_patch(CommitSpec(branch=job.branch_name, message=job.commit_message, files=job.changed_files))
-                pull_request = self.github_publisher.open_pull_request(PullRequestSpec(branch=job.branch_name, title=job.commit_message))
+            publisher = self._publisher_for(job)
+            if publisher and job.changed_files:
+                branch = publisher.create_branch(BranchSpec(name=job.branch_name, base_sha=job.base_sha))
+                commit = publisher.commit_patch(CommitSpec(branch=job.branch_name, message=job.commit_message, files=job.changed_files))
+                pull_request = publisher.open_pull_request(PullRequestSpec(branch=job.branch_name, base_branch=job.base_branch, title=job.commit_message))
                 self.store.append_event(job.run_id, "run.pull_request.published", {"branch": branch.model_dump(), "commit": commit.model_dump(), "pull_request": pull_request.model_dump()})
             else:
                 self.store.append_event(job.run_id, "run.publication.skipped", {"reason": "github_publisher_not_configured_or_no_patch"})
@@ -134,7 +146,9 @@ class StageDispatcher:
             return False
 
         if job.stage == "publish_check":
-            result = self.check_publisher.publish(job.run_id, True, "RepoPilot validation passed")
+            publisher = self._publisher_for(job)
+            check_publisher = GitHubCheckPublisher(publisher) if publisher else self.check_publisher
+            result = check_publisher.publish(job.run_id, True, "RepoPilot validation passed")
             self.store.append_event(job.run_id, "run.check.published", result.model_dump())
             return True
 
