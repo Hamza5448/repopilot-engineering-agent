@@ -1,11 +1,14 @@
 """HTTP boundary for the initial RepoPilot vertical slice."""
 
+import httpx
 import redis
 from fastapi import FastAPI, Header, HTTPException, Request, status
 
 from apps.worker.worker.queue import RedisQueue, RunJob
 from packages.agents.planner import Planner
 from packages.context.context import build_context
+from packages.github.api import GitHubInstallationTokenProvider, GitHubPublisherClient
+from packages.github.auth import GitHubAppAuthenticator, GitHubAppConfigurationError
 
 from .config import get_settings
 from .github.repositories import RepositoryStore
@@ -24,6 +27,21 @@ app.state.run_store = (
     else RunStore(settings.database_path)
 )
 app.state.queue = RedisQueue(redis.Redis.from_url(settings.redis_url))
+
+
+def resolve_branch_sha(owner: str, repository: str, branch: str, installation_id: int) -> str:
+    if not settings.github_app_id:
+        raise GitHubAppConfigurationError("GitHub App ID is not configured")
+    authenticator = GitHubAppAuthenticator(
+        settings.github_app_id,
+        private_key=settings.github_app_private_key,
+        private_key_path=settings.github_app_private_key_path,
+    )
+    token = GitHubInstallationTokenProvider(authenticator).get_token(installation_id)
+    return GitHubPublisherClient(owner, repository, token).get_branch_sha(owner, repository, branch)
+
+
+app.state.github_sha_resolver = resolve_branch_sha
 
 
 @app.get("/health", tags=["operations"])
@@ -175,6 +193,39 @@ async def github_webhook(
         for repository in event.model_dump().get("repositories_added", []):
             app.state.repository_store.upsert_from_github(repository, installation_id)
     elif x_github_event == "issues":
-        parse_event(payload)
+        event = parse_event(payload)
+        labels = event.issue.get("labels", [])
+        triggered = x_github_event == "issues" and event.action in {"opened", "reopened", "labeled"} and any(
+            label.get("name") == "repopilot" for label in labels if isinstance(label, dict)
+        )
+        if triggered:
+            repository = event.repository
+            installation_id = event.installation.get("id") if event.installation else None
+            full_name = repository.get("full_name", "")
+            if not installation_id or not repository.get("id") or "/" not in full_name:
+                raise HTTPException(status_code=400, detail="Issue event lacks repository installation context")
+            owner, repository_name = full_name.split("/", 1)
+            app.state.repository_store.upsert_from_github(repository, installation_id)
+            try:
+                base_sha = app.state.github_sha_resolver(
+                    owner,
+                    repository_name,
+                    repository.get("default_branch", "main"),
+                    installation_id,
+                )
+            except (GitHubAppConfigurationError, OSError, httpx.HTTPError) as exc:
+                raise HTTPException(status_code=503, detail="Unable to resolve repository base revision") from exc
+            run = app.state.run_store.create_run(repository["id"], "github_issue", base_sha)
+            issue = event.issue
+            app.state.queue.enqueue(
+                RunJob(
+                    run_id=run["id"],
+                    repository_id=repository["id"],
+                    base_sha=base_sha,
+                    issue_title=issue.get("title", ""),
+                    issue_body=issue.get("body", "") or "",
+                    repository_url=f"https://github.com/{full_name}.git",
+                )
+            )
 
     return {"status": "accepted", "delivery_id": x_github_delivery}

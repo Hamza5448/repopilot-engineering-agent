@@ -36,6 +36,13 @@ class GitHubPublisherClient(GitHubPublisher):
         self.client = client or httpx.Client(base_url="https://api.github.com")
         self.headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"}
 
+    def get_branch_sha(self, owner: str, repository: str, branch: str) -> str:
+        response = self.client.get(
+            f"/repos/{owner}/{repository}/git/ref/heads/{branch}", headers=self.headers
+        )
+        response.raise_for_status()
+        return response.json()["object"]["sha"]
+
     def _resource(self, response: httpx.Response) -> PublishedResource:
         response.raise_for_status()
         data: dict[str, Any] = response.json()

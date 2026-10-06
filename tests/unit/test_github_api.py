@@ -61,3 +61,12 @@ def test_publisher_commits_changed_files_through_git_data_api() -> None:
     assert result.id == "refs/heads/agent/fix-1"
     assert ("POST", "/repos/owner/repo/git/blobs") in methods_and_paths
     assert ("PATCH", "/repos/owner/repo/git/refs/heads/agent/fix-1") in methods_and_paths
+
+
+def test_publisher_resolves_branch_sha() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"object": {"sha": "base-sha"}})
+
+    client = httpx.Client(transport=httpx.MockTransport(handler), base_url="https://api.github.com")
+    publisher = GitHubPublisherClient("owner", "repo", "token", client)
+    assert publisher.get_branch_sha("owner", "repo", "main") == "base-sha"
