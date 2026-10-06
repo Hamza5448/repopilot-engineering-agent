@@ -12,6 +12,7 @@ build/
 .env
 .env.*
 !.env.example
+.local/
 .idea/
 .vscode/
 .DS_Store
