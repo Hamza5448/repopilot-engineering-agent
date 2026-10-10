@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     github_app_private_key_path: str | None = None
     github_owner: str | None = None
     github_repository: str | None = None
+    openai_api_key: str | None = None
+    openai_model: str | None = None
 
     @property
     def github_credentials_configured(self) -> bool:

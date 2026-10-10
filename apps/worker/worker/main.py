@@ -7,6 +7,8 @@ import time
 import redis
 
 from apps.api.app.storage.sqlalchemy import SqlAlchemyRunStore
+from packages.agents.openai_patches import OpenAIResponsesPatchGenerator
+from packages.agents.patches import FencedDiffPatchGenerator
 from packages.github.api import GitHubPublisherClient
 from packages.github.auth import GitHubAppConfigurationError
 from packages.observability.logging import log_event
@@ -60,6 +62,11 @@ def main() -> None:
         github_token_factory=(github_publisher_factory.token_for if github_publisher_factory else (lambda job: token))
         if token
         else None,
+        patch_generator=(
+            OpenAIResponsesPatchGenerator(os.getenv("OPENAI_API_KEY"), os.getenv("OPENAI_MODEL"))
+            if os.getenv("OPENAI_API_KEY") and os.getenv("OPENAI_MODEL")
+            else FencedDiffPatchGenerator()
+        ),
     )
     log_event(
         logger,
