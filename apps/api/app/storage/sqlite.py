@@ -63,6 +63,13 @@ class RunStore:
             row = connection.execute("SELECT * FROM agent_runs WHERE id = ?", (run_id,)).fetchone()
         return dict(row) if row else None
 
+    def list_runs(self, limit: int = 50) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM agent_runs ORDER BY created_at DESC LIMIT ?", (limit,)
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def list_events(self, run_id: str) -> list[dict[str, Any]]:
         with self._connect() as connection:
             rows = connection.execute(

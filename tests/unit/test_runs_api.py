@@ -44,3 +44,14 @@ def test_create_run_requires_onboarded_repository(tmp_path) -> None:
         json={"trigger_type": "issue", "base_sha": "abcdef1"},
     )
     assert response.status_code == 404
+
+
+def test_list_runs_returns_recent_runs(tmp_path) -> None:
+    app.state.repository_store = RepositoryStore()
+    app.state.repository_store.upsert_from_github({"id": 8, "full_name": "team/list"}, 1)
+    app.state.run_store = RunStore(str(tmp_path / "runs.db"))
+    app.state.queue = FakeQueue()
+    created = app.state.run_store.create_run(8, "issue", "abcdef1")
+    response = TestClient(app).get("/api/v1/runs?limit=10")
+    assert response.status_code == 200
+    assert response.json()[0]["id"] == created["id"]

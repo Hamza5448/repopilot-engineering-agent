@@ -54,6 +54,21 @@ class SqlAlchemyRunStore:
                 return None
             return {"id": row.id, "repository_id": row.repository_id, "trigger_type": row.trigger_type, "base_sha": row.base_sha, "status": row.status, "created_at": row.created_at.isoformat()}
 
+    def list_runs(self, limit: int = 50) -> list[dict[str, Any]]:
+        with Session(self.engine) as session:
+            rows = session.scalars(select(AgentRunRow).order_by(AgentRunRow.created_at.desc()).limit(limit)).all()
+            return [
+                {
+                    "id": row.id,
+                    "repository_id": row.repository_id,
+                    "trigger_type": row.trigger_type,
+                    "base_sha": row.base_sha,
+                    "status": row.status,
+                    "created_at": row.created_at.isoformat(),
+                }
+                for row in rows
+            ]
+
     def append_event(self, run_id: str, event_type: str, payload: dict[str, Any]) -> None:
         with Session(self.engine) as session, session.begin():
             session.add(RunEventRow(run_id=run_id, event_type=event_type, payload=json.dumps(payload), created_at=datetime.now(UTC)))

@@ -1,0 +1,22 @@
+:root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: #0c111b; color: #e7edf7; }
+* { box-sizing: border-box; }
+body { margin: 0; background: radial-gradient(circle at top right, #182744, #0c111b 45%); }
+.shell { max-width: 1280px; margin: 0 auto; padding: 42px 24px; }
+.topbar, .panel-heading, .run-row, .event { display: flex; align-items: center; justify-content: space-between; }
+.eyebrow { color: #7dd3fc; font-size: 12px; letter-spacing: .16em; margin: 0 0 10px; }
+h1 { font-size: clamp(28px, 5vw, 52px); margin: 0 0 36px; letter-spacing: -.04em; }
+h2 { margin: 0; font-size: 18px; }
+button { border: 1px solid #334155; border-radius: 9px; background: #172235; color: #e7edf7; padding: 10px 16px; cursor: pointer; }
+button:hover { border-color: #7dd3fc; }
+.metrics { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 18px; }
+.metric, .panel { background: rgba(17, 27, 43, .86); border: 1px solid #24334a; border-radius: 14px; }
+.metric { padding: 18px; min-height: 92px; }
+.metric span, small, .muted { color: #8fa2bd; font-size: 12px; display: block; }
+.metric strong { display: block; margin-top: 12px; font-size: 24px; }
+.good strong { color: #86efac; }.warn strong { color: #fde68a; }.bad strong { color: #fca5a5; }
+.grid { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 18px; }
+.panel { padding: 20px; min-height: 420px; }.panel-heading { border-bottom: 1px solid #26364f; padding-bottom: 14px; margin-bottom: 8px; }
+.run-list { display: grid; gap: 6px; }.run-row { width: 100%; text-align: left; background: transparent; border: 0; border-bottom: 1px solid #1e2b40; border-radius: 0; padding: 14px 4px; }
+.run-row strong, .event strong { display: block; font-size: 13px; }.status { font-size: 11px; text-transform: uppercase; color: #cbd5e1; }.status.succeeded { color: #86efac; }.status.waiting_for_approval { color: #fde68a; }.status.failed { color: #fca5a5; }
+.timeline { display: grid; gap: 2px; }.event { justify-content: flex-start; gap: 12px; padding: 13px 4px; border-bottom: 1px solid #1e2b40; }.dot { width: 8px; height: 8px; border-radius: 50%; background: #7dd3fc; box-shadow: 0 0 12px #7dd3fc; }.error { color: #fca5a5; min-height: 20px; }
+@media (max-width: 800px) { .metrics, .grid { grid-template-columns: 1fr; }.metrics { grid-template-columns: repeat(2, 1fr); } }

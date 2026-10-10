@@ -5,6 +5,7 @@ import logging
 import httpx
 import redis
 from fastapi import FastAPI, Header, HTTPException, Request, status
+from fastapi.middleware.cors import CORSMiddleware
 
 from apps.worker.worker.queue import RedisQueue, RunJob
 from packages.agents.planner import Planner
@@ -23,6 +24,13 @@ from .storage.sqlite import RunStore
 settings = get_settings()
 logger = logging.getLogger("repopilot.api")
 app = FastAPI(title=settings.app_name, version="0.1.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
+)
 app.state.delivery_store = DeliveryStore()
 app.state.repository_store = RepositoryStore()
 app.state.run_store = (
@@ -103,6 +111,13 @@ def get_run(run_id: str) -> dict[str, object]:
     if run is None:
         raise HTTPException(status_code=404, detail="Run not found")
     return run
+
+
+@app.get("/api/v1/runs", tags=["runs"])
+def list_runs(limit: int = 50) -> list[dict[str, object]]:
+    if limit < 1 or limit > 100:
+        raise HTTPException(status_code=400, detail="Limit must be between 1 and 100")
+    return app.state.run_store.list_runs(limit)
 
 
 @app.get("/api/v1/runs/{run_id}/events", tags=["runs"])
