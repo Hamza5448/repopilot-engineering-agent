@@ -160,6 +160,15 @@ class StageDispatcher:
                 self.store.update_status(job.run_id, "failed")
                 self.store.append_event(job.run_id, "run.failed", {"reason": "validation_failed"})
                 return True
+            if job.require_approval:
+                pending_job = job.model_copy(update={"stage": "publish", "attempt": 1})
+                self.store.update_status(job.run_id, "waiting_for_approval")
+                self.store.append_event(
+                    job.run_id,
+                    "run.waiting_for_approval",
+                    {"job": pending_job.model_dump(mode="json"), "gate": "publication"},
+                )
+                return False
             self._next(job, "publish")
             return False
 

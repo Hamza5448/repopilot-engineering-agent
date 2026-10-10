@@ -136,6 +136,16 @@ def approve_run(run_id: str, decision: ApprovalDecision) -> dict[str, object]:
         raise HTTPException(status_code=409, detail="Run is not waiting for approval")
     app.state.run_store.update_status(run_id, "queued")
     app.state.run_store.append_event(run_id, "run.approved", decision.model_dump())
+    pending = next(
+        (
+            event
+            for event in reversed(app.state.run_store.list_events(run_id))
+            if event["event_type"] == "run.waiting_for_approval" and event["payload"].get("job")
+        ),
+        None,
+    )
+    if pending:
+        app.state.queue.enqueue(RunJob.model_validate(pending["payload"]["job"]))
     return app.state.run_store.get_run(run_id)
 
 
@@ -260,6 +270,7 @@ async def github_webhook(
                         github_owner=owner,
                         github_repository=repository_name,
                         base_branch=repository.get("default_branch", "main"),
+                        require_approval=True,
                         base_sha=base_sha,
                         issue_title=issue.get("title", ""),
                         issue_body=issue.get("body", "") or "",

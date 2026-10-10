@@ -15,6 +15,7 @@ class RunJob(BaseModel):
     github_owner: str | None = None
     github_repository: str | None = None
     base_branch: str = "main"
+    require_approval: bool = False
     base_sha: str = "unknown"
     stage: str = "triage"
     attempt: int = 1
