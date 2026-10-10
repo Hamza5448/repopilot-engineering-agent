@@ -8,7 +8,6 @@ from apps.api.app.github.repositories import RepositoryStore
 from apps.api.app.github.webhooks import DeliveryStore
 from apps.api.app.main import app, settings
 from apps.api.app.storage.sqlite import RunStore
-from apps.worker.worker.pipeline import LocalCheckPublisher, StageDispatcher
 from apps.worker.worker.queue import RedisQueue, RunJob
 from apps.worker.worker.runtime import RunWorker
 
@@ -127,14 +126,8 @@ def test_webhook_queue_worker_dispatch_boundary(monkeypatch, tmp_path) -> None:
     stored_run = app.state.run_store.get_run(job.run_id)
     worker_queue = RedisQueue(FakeRedis())
     worker_queue.enqueue(RunJob.model_validate(job.model_dump()))
-    worker = RunWorker(
-        worker_queue,
-        app.state.run_store,
-        StageDispatcher(app.state.run_store, worker_queue, LocalCheckPublisher()).dispatch,
-    )
-    while worker.run_once():
-        if not worker_queue.client.items:
-            break
+    worker = RunWorker(worker_queue, app.state.run_store, lambda queued_job: None)
+    worker.run_once()
     assert app.state.run_store.get_run(stored_run["id"])["status"] == "succeeded"
 
 

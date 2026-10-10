@@ -61,13 +61,15 @@ def test_pipeline_applies_patch_and_runs_workspace_validation(tmp_path) -> None:
             repository_id=1,
             base_sha=base_sha,
             repository_url=str(repository),
-            patch="""diff --git a/parser.py b/parser.py
+            issue_body="""Apply this patch:
+```diff
+diff --git a/parser.py b/parser.py
 --- a/parser.py
 +++ b/parser.py
 @@ -1 +1 @@
 -VALUE = 1
 +VALUE = 2
-""",
+```""",
         )
     )
     dispatcher = StageDispatcher(store, queue, LocalCheckPublisher(), str(tmp_path / "workspaces"))

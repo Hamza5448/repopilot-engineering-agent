@@ -36,6 +36,18 @@ def test_workspace_clones_exact_sha_and_applies_patch(tmp_path) -> None:
     assert "VALUE = 2" in workspace.diff()
 
 
+def test_workspace_collects_bounded_text_snapshots(tmp_path) -> None:
+    repository, sha = create_repository(tmp_path)
+    (repository / "README.md").write_text("RepoPilot\n")
+    git(repository, "add", "README.md")
+    git(repository, "commit", "-m", "docs")
+    sha = git(repository, "rev-parse", "HEAD")
+    workspace = RepositoryWorkspace(tmp_path / "workspace")
+    workspace.clone_at(str(repository), sha)
+    snapshots = workspace.file_snapshots()
+    assert {snapshot.path for snapshot in snapshots} == {"README.md", "parser.py"}
+
+
 def test_workspace_rejects_protected_path_patch(tmp_path) -> None:
     repository, sha = create_repository(tmp_path)
     workspace = RepositoryWorkspace(tmp_path / "workspace")

@@ -2,7 +2,10 @@
 
 import os
 import subprocess
+from collections.abc import Iterator
 from pathlib import Path
+
+from packages.context.context import FileSnapshot
 
 from .policy import CommandPolicy, DeniedOperation
 
@@ -72,6 +75,29 @@ class RepositoryWorkspace:
     def changed_files(self) -> list[str]:
         output = self._git("diff", "--cached", "--name-only")
         return [path for path in output.splitlines() if path]
+
+    def file_snapshots(self, max_files: int = 200, max_file_chars: int = 16_000) -> list[FileSnapshot]:
+        """Read bounded text files from the exact checkout without entering protected paths."""
+
+        snapshots: list[FileSnapshot] = []
+        for path in self._iter_files():
+            if len(snapshots) >= max_files:
+                break
+            relative = path.relative_to(self.path).as_posix()
+            try:
+                self.policy.authorize_path(relative)
+                content = path.read_text(encoding="utf-8")
+            except (DeniedOperation, OSError, UnicodeDecodeError):
+                continue
+            snapshots.append(
+                FileSnapshot(path=relative, content=content[:max_file_chars], language=path.suffix.lstrip(".") or None)
+            )
+        return snapshots
+
+    def _iter_files(self) -> Iterator[Path]:
+        for path in sorted(self.path.rglob("*")):
+            if path.is_file() and ".git" not in path.relative_to(self.path).parts:
+                yield path
 
     def diff(self) -> str:
         return self._git("diff", "--cached")

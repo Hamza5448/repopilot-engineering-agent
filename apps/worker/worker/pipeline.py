@@ -4,6 +4,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol
 
+from packages.agents.patches import FencedDiffPatchGenerator, PatchGenerator
 from packages.agents.planner import Planner
 from packages.context.context import build_context
 from packages.github.publisher import (
@@ -67,6 +68,7 @@ class StageDispatcher:
         github_publisher: GitHubPublisher | None = None,
         github_publisher_factory: Callable[[RunJob], GitHubPublisher] | None = None,
         github_token_factory: Callable[[RunJob], str] | None = None,
+        patch_generator: PatchGenerator | None = None,
     ) -> None:
         self.store = store
         self.queue = queue
@@ -75,6 +77,7 @@ class StageDispatcher:
         self.github_publisher = github_publisher
         self.github_publisher_factory = github_publisher_factory
         self.github_token_factory = github_token_factory
+        self.patch_generator = patch_generator or FencedDiffPatchGenerator()
 
     def _publisher_for(self, job: RunJob) -> GitHubPublisher | None:
         if self.github_publisher_factory is not None and job.installation_id:
@@ -105,17 +108,44 @@ class StageDispatcher:
             return False
 
         if job.stage == "implement":
-            if not job.repository_url or not job.patch:
-                self.store.append_event(job.run_id, "run.implementation.skipped", {"reason": "no_patch_supplied"})
+            if not job.repository_url:
+                self.store.append_event(job.run_id, "run.implementation.skipped", {"reason": "no_repository_url"})
                 self._next(job, "validate")
                 return False
             workspace = RepositoryWorkspace(Path(self.workspace_root) / job.run_id)
             access_token = self.github_token_factory(job) if self.github_token_factory else None
             workspace.clone_at(job.repository_url, job.base_sha, access_token=access_token)
-            changed = workspace.apply_patch(job.patch)
+            snapshots = workspace.file_snapshots()
+            context = build_context(
+                repository_id=job.repository_id,
+                base_sha=job.base_sha,
+                issue_title=job.issue_title or "Repository task",
+                issue_body=job.issue_body,
+                files=snapshots,
+            )
+            self.store.append_event(
+                job.run_id,
+                "run.context.collected",
+                {"file_count": len(snapshots), "selected_files": [file.path for file in context.files]},
+            )
+            patch = job.patch or self.patch_generator.generate(job.issue_body, context)
+            if not patch:
+                self.store.append_event(job.run_id, "run.implementation.skipped", {"reason": "no_patch_generated"})
+                self._next(job, "validate")
+                return False
+            changed = workspace.apply_patch(patch)
             changed_files = {path: (workspace.path / path).read_text() for path in changed}
             self.store.append_event(job.run_id, "run.implemented", {"changed_files": changed})
-            self._next(job.model_copy(update={"workspace_path": str(workspace.path), "changed_files": changed_files}), "validate")
+            self._next(
+                job.model_copy(
+                    update={
+                        "patch": patch,
+                        "workspace_path": str(workspace.path),
+                        "changed_files": changed_files,
+                    }
+                ),
+                "validate",
+            )
             return False
 
         if job.stage == "validate":
