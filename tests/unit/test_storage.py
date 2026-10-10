@@ -14,3 +14,4 @@ def test_run_store_persists_run_and_creation_event(tmp_path) -> None:
     assert loaded["repository_id"] == 42
     assert loaded["status"] == "created"
     assert events[0]["event_type"] == "run.created"
+    assert second_store.list_runs(10)[0]["id"] == created["id"]
